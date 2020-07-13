@@ -1,0 +1,80 @@
+version: '3'
+
+services:
+  react:
+    build:
+      context: reports-dashboard-cra
+      dockerfile: Dockerfile
+      args:
+        NPM_TOKEN: $NPM_TOKEN
+    depends_on:
+      - api
+      - sidekiq
+      - mailhog
+    command: bash -c "yarn start"
+    volumes:
+      - ./reports-dashboard-cra:/react_app
+      - ./reports-dashboard-cra:/react_app/reports-dashboard-cra/node_modules
+    ports:
+      - 3000
+    environment:
+      REACT_APP_DATA_PLATFORM_URL: "http://api:4000/graphql"
+
+  api:
+    build:
+      context: data-platform
+      dockerfile: Dockerfile
+    command: bash -c "bundle exec rails s -p 4000 -b '0.0.0.0'"
+    volumes:
+      - .:/data-platform
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      PORT: "4000"
+      BASE_URL: "http://api:4000"
+      INSIGHTS_DASHBOARD_URL: "http://react:3000"
+      ALLOWED_ORIGINS: "http://react:3000"
+      RAILS_ENV: "development"
+      REDIS_HOST: "redis"
+    ports:
+      - 4000
+
+  postgres:
+    image: 'postgres:10.2-alpine'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: 'root'
+      POSTGRES_PASSWORD: ''
+
+  redis:
+    image: redis
+    volumes:
+      - redis:/data
+
+  sidekiq:
+    build:
+      context: data-platform
+      dockerfile: Dockerfile
+    volumes:
+      - .:/data-platform
+    environment:
+      RAILS_ENV: "development"
+      REDIS_URL: "redis://redis:6379/0" # URL needed for sidekiq (instead of just host)
+    depends_on:
+      - api
+      - redis
+      - postgres
+    entrypoint: ["sh", "./data-platform/sidekiq-entrypoint.sh"] # overrides entrypoint in Dockerfile
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    restart: always
+    ports:
+      - 1025
+      - 8025
+
+volumes:
+  pgdata:
+  redis:
