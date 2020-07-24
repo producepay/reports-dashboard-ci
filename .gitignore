@@ -1,0 +1,13 @@
+# local environment variable files for encrypting
+back-end.env
+front-end.env
+sidekiq.env
+build-args
+
+# Codeship AES key, see https://documentation.codeship.com/pro/builds-and-configuration/environment-variables/#downloading-your-aes-key fore more info
+codeship.aes
+
+# Misc files generated from docker, IDEs, etc.
+/pgdata
+/redis
+.DS_Store

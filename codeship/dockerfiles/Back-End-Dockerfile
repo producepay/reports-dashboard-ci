@@ -1,0 +1,50 @@
+# First stage, clones reports-dashboard-cra repository
+FROM ubuntu:16.04 as clone-stage
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    git-core
+
+ARG GITHUB_TOKEN
+ARG BRANCH
+
+# Check if a branch exists of the same name on the corresponding repository
+# For reports-dashboard-cra and data-platform. If it doesn't, use develop
+
+RUN export BRANCH_EXISTS=$(git ls-remote --heads https://${GITHUB_TOKEN}@github.com/producepay/data-platform.git ${BRANCH} | wc -l); \
+    if [ $BRANCH_EXISTS -eq 1 ] ; then \
+      git clone -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/producepay/data-platform.git; \
+    else \
+      git clone -b develop https://${GITHUB_TOKEN}@github.com/producepay/data-platform.git; \
+    fi;
+
+WORKDIR /data-platform
+
+FROM ruby:2.6.3
+
+# Update and install base packages
+RUN apt-get update -qq && apt-get install -y nodejs postgresql-client
+
+ENV RAILS_LOG_TO_STDOUT 1
+
+COPY --from=clone-stage /data-platform ./
+
+# Copy the Gemfile as well as the Gemfile.lock and install
+# the RubyGems. This is a separate step so the dependencies
+# will be cached unless changes to one of those two files
+# are made.
+COPY --from=clone-stage /data-platform/Gemfile ./Gemfile
+COPY --from=clone-stage /data-platform/Gemfile.lock ./Gemfile.lock
+RUN gem install bundler
+RUN bundle install
+
+# Without this, rails will throw a warning and exit the container with code 1.
+# TODO find a better way to handle this
+RUN git config --global core.hooksPath .githooks
+
+# Copy the main application.
+COPY . .
+
+# Expose the applications port to the host machine
+EXPOSE 4000

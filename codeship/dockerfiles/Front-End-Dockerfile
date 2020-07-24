@@ -1,0 +1,43 @@
+# First stage, clones reports-dashboard-cra repository
+FROM ubuntu:16.04 as clone-stage
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    git-core
+
+ARG GITHUB_TOKEN
+ARG BRANCH
+
+# Check if a branch exists of the same name on the corresponding repository
+# For reports-dashboard-cra and data-platform. If it doesn't, use develop
+
+RUN export BRANCH_EXISTS=$(git ls-remote --heads https://${GITHUB_TOKEN}@github.com/producepay/reports-dashboard-cra.git ${BRANCH} | wc -l); \
+    if [ $BRANCH_EXISTS -eq 1 ] ; then \
+      git clone -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/producepay/reports-dashboard-cra.git; \
+    else \
+      git clone -b develop https://${GITHUB_TOKEN}@github.com/producepay/reports-dashboard-cra.git; \
+    fi;
+
+WORKDIR /reports-dashboard-cra
+
+# Second stage, copies cloned files and runs yarn install
+# Use Cypress provided image with all dependencies included
+FROM node:10.16.2
+
+RUN apt-get update -qq && apt-get install -y build-essential nodejs libgtk2.0-0 libgtk-3-0 libnotify-dev libgconf-2-4 libnss3 libxss1 libasound2 libxtst6 xauth xvfb
+
+ENV PATH /reports-dashboard-cra/node_modules/.bin:$PATH
+
+ARG NPM_TOKEN
+ENV NPM_TOKEN=${NPM_TOKEN}
+
+COPY --from=clone-stage /reports-dashboard-cra ./
+
+COPY --from=clone-stage /reports-dashboard-cra/.npmrc .npmrc
+
+RUN yarn install
+
+COPY . .
+
+EXPOSE 3000
